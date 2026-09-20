@@ -1,0 +1,11 @@
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 1024,
+  "system": "당신은 알파테크 기술 자문가입니다.",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Project 오로라 계약에 대해 OMEGA와 논의할 안건을 정리해주세요."
+    }
+  ]
+}

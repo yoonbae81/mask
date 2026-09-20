@@ -1,0 +1,220 @@
+@import "tailwindcss";
+
+/* 수동 테마 토글(auto/light/dark): .dark 및 html[data-theme="dark"] 기준 */
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-surface: var(--mask-surface);
+  --color-panel: var(--mask-panel);
+  --color-raise: var(--mask-raise);
+  --color-ink: var(--mask-ink);
+  --color-soft: var(--mask-soft);
+  --color-faint: var(--mask-faint);
+  --color-line: var(--mask-line);
+  --color-accent: var(--mask-accent);
+  --color-accent-strong: var(--mask-accent-strong);
+  --color-accent-soft: var(--mask-accent-soft);
+  --color-accent-ink: var(--mask-accent-ink);
+  --color-danger: var(--mask-danger);
+  --color-warn: var(--mask-warn);
+  --color-ok: var(--mask-ok);
+  --font-sans:
+    "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, "JetBrains Mono", "Fira Code", "D2Coding", Menlo, Consolas, monospace;
+}
+
+:root {
+  --mask-surface: #fafafa;
+  --mask-panel: #ffffff;
+  --mask-raise: #f5f5f5;
+  --mask-ink: #171717;
+  --mask-soft: #525252;
+  --mask-faint: #a3a3a3;
+  --mask-line: #e5e5e5;
+  --mask-accent: #4338ca;
+  --mask-accent-strong: #312e81;
+  --mask-accent-soft: color-mix(in srgb, #4338ca 10%, transparent);
+  --mask-accent-ink: #ffffff;
+  --mask-danger: #b91c1c;
+  --mask-warn: #92400e;
+  --mask-ok: #15803d;
+}
+
+[data-theme="dark"] {
+  --mask-surface: #0a0a0a;
+  --mask-panel: #171717;
+  --mask-raise: #262626;
+  --mask-ink: #f5f5f5;
+  --mask-soft: #d4d4d4;
+  --mask-faint: #737373;
+  --mask-line: #2c2c2c;
+  --mask-accent: #818cf8;
+  --mask-accent-strong: #c7d2fe;
+  --mask-accent-soft: color-mix(in srgb, #818cf8 16%, transparent);
+  --mask-accent-ink: #10121a;
+  --mask-danger: #f87171;
+  --mask-warn: #fbbf24;
+  --mask-ok: #4ade80;
+}
+
+html {
+  background-color: #fafafa;
+}
+
+html.dark,
+html[data-theme="dark"] {
+  background-color: #0a0a0a;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-surface text-ink antialiased;
+  font-family: var(--font-sans);
+}
+
+/* visualViewport 보정(모바일 키보드/URL바) — JS가 --vvh(px)를 갱신한다 */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  height: var(--vvh, 100dvh);
+  overflow: hidden;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-panel;
+  }
+
+  .card-pad {
+    @apply p-4 sm:p-5;
+  }
+
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-line bg-panel px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-raise focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-45;
+  }
+
+  .btn-primary {
+    @apply border-transparent bg-accent text-accent-ink hover:bg-accent hover:text-accent-ink hover:opacity-90;
+  }
+
+  .btn-ghost {
+    @apply border-transparent bg-transparent hover:bg-raise;
+  }
+
+  .btn-danger {
+    @apply border-transparent bg-danger text-white hover:bg-danger hover:text-white hover:opacity-90;
+  }
+
+  .field {
+    @apply w-full resize-y rounded-lg border border-line bg-panel px-3 py-2.5 font-mono text-[13px] leading-relaxed text-ink placeholder:text-faint focus:border-accent focus:outline-none;
+  }
+
+  .input {
+    @apply w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-ink focus:border-accent focus:outline-none;
+  }
+
+  .label {
+    @apply text-xs font-semibold tracking-wide text-faint uppercase;
+  }
+
+  .chip {
+    @apply rounded bg-accent-soft px-1 py-0.5 font-mono text-[0.85em] font-semibold whitespace-nowrap text-accent-strong;
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-raise px-2 py-0.5 text-xs text-soft;
+  }
+
+  .tab {
+    @apply rounded-md px-3 py-1.5 text-sm font-semibold text-soft transition-colors hover:bg-raise hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+  }
+
+  .tab[aria-current="page"] {
+    @apply bg-accent-soft text-accent-strong hover:bg-accent-soft hover:text-accent-strong;
+  }
+
+  .banner {
+    @apply rounded-lg border px-3 py-2 text-sm;
+  }
+
+  .banner-warn {
+    @apply border-warn/40 bg-warn/10 text-warn;
+  }
+
+  .banner-danger {
+    @apply border-danger/40 bg-danger/10 text-danger;
+  }
+
+  .banner-ok {
+    @apply border-ok/40 bg-ok/10 text-ok;
+  }
+
+  /* 드롭존 — 전 페이지 동일 피드백 */
+  .drop-zone {
+    @apply transition-[border-color,box-shadow] duration-150;
+  }
+
+  .drop-zone[data-drop="ok"] {
+    @apply border-accent ring-2 ring-accent/25;
+  }
+
+  .drop-zone[data-drop="reject"] {
+    @apply border-danger ring-2 ring-danger/20;
+  }
+
+  .restore-mark {
+    @apply rounded bg-accent-soft px-0.5 font-medium text-accent-strong;
+  }
+
+  .sheet-backdrop {
+    @apply fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-3 backdrop-blur-sm sm:items-center;
+  }
+
+  .sheet-panel {
+    @apply flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-panel shadow-2xl;
+  }
+}
+
+/* 사용 안내 오버레이 본문(렌더링된 안내 HTML) */
+.guide-body h1 {
+  font-size: 17pt;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.guide-body h2 {
+  margin-top: 1rem;
+  font-size: 12.5pt;
+  font-weight: 700;
+}
+
+.guide-body p,
+.guide-body li {
+  margin-top: 0.25rem;
+  font-size: 11.75pt;
+  line-height: 1.625;
+  color: var(--mask-soft);
+}
+
+.guide-body ol {
+  margin-top: 0.25rem;
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+.guide-body ul {
+  margin-top: 0.25rem;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.guide-body strong {
+  font-weight: 600;
+  color: var(--mask-ink);
+}

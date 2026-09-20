@@ -1,0 +1,22 @@
+{
+  "model": "gpt-4o",
+  "messages": [
+    {
+      "role": "user",
+      "content": "알파테크 정보 조회"
+    },
+    {
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "call_abc",
+          "type": "function",
+          "function": {
+            "name": "search_db",
+            "arguments": "{\"query\":\"알파테크\",\"project\":\"Project 오로라\"}"
+          }
+        }
+      ]
+    }
+  ]
+}

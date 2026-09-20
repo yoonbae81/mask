@@ -1,0 +1,50 @@
+# Mask 업스트림 provider 정의
+#
+# 실제 사용 파일의 경로는 환경변수 MASK_PROVIDERS_FILE 로 지정한다.
+# 접속 가능한 업스트림을 전부 적어두고, 맨 위 active 한 줄로 지금 쓸 것을 고른다.
+#
+# Mask 은 HTTP 홉 위에 앉는다. claude / codex CLI 는 상위 계층(OpenClaw, IDE 확장)이
+# 이미 실행하고 있으므로 Mask 이 대신 실행하지 않는다. 배치는 계획서 §0 참조.
+#
+# auth:
+#   passthrough  클라이언트가 보낸 구독 자격증명을 그대로 전달. API 키 불필요.
+#   api_key      클라이언트 인증 헤더를 제거하고 api_key_env 가 가리키는 값을 주입.
+#
+# endpoints 는 요청 경로로 판정된 dialect 별 주소다.
+#   anthropic → /v1/messages          인증 헤더 기본값: x-api-key
+#   openai    → /v1/chat/completions  인증 헤더 기본값: Authorization: Bearer
+#
+# ※ API 키 '값'은 여기 쓰지 않는다. 환경변수 '이름'만 적고 값은 .env 에 둔다.
+
+# ══ 지금 사용할 provider ══════════════════════════════════════
+active: anthropic
+
+# 한도 소진 등으로 실패하면 순서대로 시도한다.
+# fallback 대상은 들어온 dialect 의 endpoint 를 갖고 있어야 한다.
+# OpenClaw 처럼 자체 모델 fallback 이 있는 클라이언트를 쓸 때는 비워둔다.
+fallback: []
+
+providers:
+
+  anthropic:
+    type: api
+    auth: passthrough
+    forward_headers: [authorization, x-api-key, anthropic-version, anthropic-beta]
+    endpoints:
+      anthropic: https://api.anthropic.com
+
+  openai:
+    type: api
+    auth: passthrough
+    forward_headers: [authorization, openai-organization, openai-beta]
+    endpoints:
+      openai: https://api.openai.com
+
+  custom_llm:
+    type: api
+    auth: api_key
+    api_key_env: CUSTOM_LLM_KEY
+    endpoints:
+      openai: https://api.custom-llm.com/v1
+      # anthropic dialect 클라이언트를 custom_llm 으로 fallback 시키려면 활성화한다
+      # anthropic: https://api.custom-llm.com/v1

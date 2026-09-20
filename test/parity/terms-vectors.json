@@ -1,0 +1,58 @@
+{
+  "description": "Shared parity vectors for mask/restore. Server TS tests and browser smoke (same src/privacy source) execute the same cases. expectedMasked must match exactly; restore round-trips to input unless expectedRestored is set (alias canonicalization).",
+  "termsYaml": "INTERNAL:\n  - 알파테크\n  - term: 알파\n    boundary: strict\n\nPROJECT:\n  - Project 오로라, 오로라\n\nCUSTOMER:\n  - CORP\n\nPHONE:\n  patterns:\n    - '\\b01[016-9][-\\s]?\\d{3,4}[-\\s]?\\d{4}\\b'\n\nEMAIL:\n  patterns:\n    - '\\b[\\w.+-]+@[\\w-]+\\.[\\w.-]+\\b'\n",
+  "cases": [
+    {
+      "name": "korean-particle",
+      "input": "알파테크는 Project 오로라를 검토했다",
+      "expectedMasked": "<INTERNAL_1A>는 <PROJECT_1A>를 검토했다"
+    },
+    {
+      "name": "ascii-boundary",
+      "input": "CORP와 CORPORATION",
+      "expectedMasked": "<CUSTOMER_1A>와 CORPORATION"
+    },
+    {
+      "name": "strict-blocks-hangul-prefix",
+      "input": "글로벌알파",
+      "expectedMasked": "글로벌알파"
+    },
+    {
+      "name": "alias-canonical",
+      "input": "오로라 일정",
+      "expectedMasked": "<PROJECT_1B> 일정",
+      "expectedRestored": "오로라 일정"
+    },
+    {
+      "name": "phone-pattern",
+      "input": "연락처 010-1234-5678",
+      "expectedMasked": "연락처 <PHONE_1A>"
+    },
+    {
+      "name": "email-pattern",
+      "input": "메일 hong@example.com 참조",
+      "expectedMasked": "메일 <EMAIL_1A> 참조"
+    },
+    {
+      "name": "multi-category-order",
+      "input": "알파테크 CORP 010-1234-5678",
+      "expectedMasked": "<INTERNAL_1A> <CUSTOMER_1A> <PHONE_1A>"
+    },
+    {
+      "name": "escaped-token-input",
+      "input": "이미 <PROJECT_9> 있음",
+      "expectedMasked": "이미 <<PROJECT_9>> 있음",
+      "expectedRestored": "이미 <PROJECT_9> 있음"
+    },
+    {
+      "name": "no-match",
+      "input": "오늘 날씨가 맑습니다",
+      "expectedMasked": "오늘 날씨가 맑습니다"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "expectedMasked": ""
+    }
+  ]
+}

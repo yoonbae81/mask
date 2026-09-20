@@ -1,0 +1,13 @@
+node_modules/
+.env
+config/terms.yaml
+config/providers.yaml
+web/dist/
+web/public/*personal*.yaml
+__pycache__/
+*.egg-info/
+.venv/
+.omo/
+.iteration_state.json
+
+.serena/

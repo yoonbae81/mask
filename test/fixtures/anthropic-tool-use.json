@@ -1,0 +1,30 @@
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01",
+          "name": "read_file",
+          "input": {
+            "path": "/docs/aurora-project.txt",
+            "query": "알파테크와 OMEGA 합의문"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01",
+          "content": "파일 내용: 알파테크 2026년 3분기 Project 오로라 진행현황 보고서"
+        }
+      ]
+    }
+  ]
+}
