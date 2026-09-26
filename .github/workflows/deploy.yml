@@ -10,7 +10,7 @@
 #            DEPLOY_ROOT             (optional) default /opt
 # Host: <root>/<repo> is a clean git checkout of the pushed branch (main/master); `git fetch` works unattended.
 
-name: Deploy over WireGuard
+name: Deploy
 
 on:
   push:
