@@ -67,48 +67,80 @@ jobs:
             CHECK=accept-new
           fi
 
-          # Variables are shell-quoted (%q) and prepended to the script sent over ssh.
-          {
-            printf 'repo=%q sha=%q branch=%q service=%q build=%q root=%q\n' \
-              "$REPO" "$GITHUB_SHA" "$GITHUB_REF_NAME" "$SERVICE" "$BUILD_CMD" "$DEPLOY_ROOT"
-            cat <<'REMOTE'
+          # Remote script; phase=update|poll|restart. The build runs detached on the
+          # host so a dropped ssh connection cannot kill it; the runner polls for it.
+          cat > "$RUNNER_TEMP/remote.sh" <<'REMOTE'
           set -euo pipefail
           export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
           export GIT_TERMINAL_PROMPT=0
-
-          # Pull exactly the commit that triggered this run.
           cd "${root:-/opt}/$repo"
-          [ "$(git branch --show-current)" = "$branch" ]
-          git diff --quiet && git diff --cached --quiet
-          git fetch -q origin "$branch"
-          git merge --ff-only "$sha"
+          d="${TMPDIR:-/tmp}/deploy-$repo"
 
-          [ -z "$build" ] || bash -euo pipefail -c "$build"
-
-          # Restart each listed service (default <repo>.service if it exists).
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          if [ "$(uname -s)" = Darwin ]; then
-            for svc in $service; do
-              launchctl kickstart -k "gui/$(id -u)/$svc"; sleep 3
-              launchctl print "gui/$(id -u)/$svc" | grep -Eq '^\s*pid = [0-9]+'
-            done
+          if [ "$phase" = update ]; then
+            # Pull exactly the commit that triggered this run.
+            [ "$(git branch --show-current)" = "$branch" ]
+            git diff --quiet && git diff --cached --quiet
+            git fetch -q origin "$branch"
+            git merge --ff-only "$sha"
+            if [ -n "$build" ]; then
+              rm -rf "$d"; mkdir -p "$d"
+              BUILD="$build" setsid nohup bash -c \
+                'bash -euo pipefail -c "$BUILD" >"$1/log" 2>&1; echo $? >"$1/rc"' _ "$d" \
+                </dev/null >/dev/null 2>&1 &
+            fi
+          elif [ "$phase" = poll ]; then
+            if [ -f "$d/rc" ]; then echo "rc=$(cat "$d/rc")"; tail -n 40 "$d/log"; else echo running; fi
           else
-            [ -n "$service" ] || ! systemctl --user cat "$repo.service" >/dev/null 2>&1 || service="$repo.service"
-            for svc in $service; do
-              systemctl --user restart "$svc"
-              systemctl --user is-active --quiet "$svc"
-            done
+            # Restart each listed service (default <repo>.service if it exists).
+            export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+            if [ "$(uname -s)" = Darwin ]; then
+              for svc in $service; do
+                launchctl kickstart -k "gui/$(id -u)/$svc"; sleep 3
+                launchctl print "gui/$(id -u)/$svc" | grep -Eq '^\s*pid = [0-9]+'
+              done
+            else
+              [ -n "$service" ] || ! systemctl --user cat "$repo.service" >/dev/null 2>&1 || service="$repo.service"
+              for svc in $service; do
+                systemctl --user restart "$svc"
+                systemctl --user is-active --quiet "$svc"
+              done
+            fi
           fi
           REMOTE
-          } | ssh -i "$RUNNER_TEMP/ssh_key" \
-                -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
-                -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-                -o "StrictHostKeyChecking=$CHECK" \
-                -o "UserKnownHostsFile=$RUNNER_TEMP/known_hosts" \
-                "$USER@$HOST" bash -s
+
+          # Variables are shell-quoted (%q) and prepended to the script sent over ssh.
+          rssh() {
+            { printf 'repo=%q sha=%q branch=%q service=%q build=%q root=%q phase=%q\n' \
+                "$REPO" "$GITHUB_SHA" "$GITHUB_REF_NAME" "$SERVICE" "$BUILD_CMD" "$DEPLOY_ROOT" "$1"
+              cat "$RUNNER_TEMP/remote.sh"
+            } | ssh -i "$RUNNER_TEMP/ssh_key" \
+                  -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+                  -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+                  -o "StrictHostKeyChecking=$CHECK" \
+                  -o "UserKnownHostsFile=$RUNNER_TEMP/known_hosts" \
+                  "$USER@$HOST" bash -s
+          }
+
+          rssh update
+
+          if [ -n "$BUILD_CMD" ]; then
+            done=
+            for _ in $(seq 1 90); do
+              sleep 10
+              out=$(rssh poll 2>&1) || { echo "poll failed, retrying"; continue; }
+              if grep -q '^rc=' <<<"$out"; then
+                printf '%s\n' "$out"
+                [ "$(sed -n 's/^rc=//p' <<<"$out" | head -1)" = 0 ] || { echo "build failed"; exit 1; }
+                done=1; break
+              fi
+            done
+            [ -n "$done" ] || { echo "build timed out"; exit 1; }
+          fi
+
+          rssh restart
 
       - name: Disconnect and clean up
         if: always()
         run: |
           sudo wg-quick down "$RUNNER_TEMP/wg.conf" || true
-          rm -f "$RUNNER_TEMP"/{wg.conf,ssh_key,known_hosts}
+          rm -f "$RUNNER_TEMP"/{wg.conf,ssh_key,known_hosts,remote.sh}
