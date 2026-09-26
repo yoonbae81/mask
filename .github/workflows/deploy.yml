@@ -37,7 +37,7 @@ jobs:
       DEPLOY_ROOT: ${{ vars.DEPLOY_ROOT }}
 
     steps:
-      - name: Connect WireGuard
+      - name: Connect
         env:
           WG_CONFIG: ${{ secrets.WG_CONFIG }}
         run: |
