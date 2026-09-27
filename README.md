@@ -399,10 +399,24 @@ npm run inspect -- --payload test/fixtures/anthropic-messages.json
 건수, 폴백 사용 여부, `\용어` 우회 건수, 타임스탬프)를 메모리 원형 버퍼(최근 200건,
 재시작 시 소실)로 조회한다. 용어 원문은 구조적으로 담을 수 없다 — 건수만 기록한다.
 
+**마스킹 감사 로그(journalctl)** — 프록시 요청마다 `mask_activity` 구조화 로그 한 줄이
+기록된다(requestId, provider, dialect, 분류별 치환 건수, `\용어` 우회 건수, 가드 작동
+여부, 업스트림 상태, 소요 시간). 용어 원문은 담기지 않으며, 로그 가드도 동일 적용된다.
+`masked` 가 `{}` 면 치환 대상 없이 통과한 요청이다.
+
+```bash
+# 실시간 감시
+journalctl --user -u mask -f -g mask_activity
+
+# 오늘 전체 조회
+journalctl --user -u mask --since today -g mask_activity
+```
+
 **브라우저 미리보기** — `web/` (Vercel 분리 배포, `/mask/mask`·`/mask/restore`·`/mask/terms`).
 게이트웨이와 같은 마스킹·복원 함수(`src/privacy`)를 브라우저에서 직접 실행하는 테스트용
 페이지다. 서버로 문서를 전송하지 않으며, LLM endpoint 호출·API 키 입력 기능은 없다.
-개인 사전은 브라우저 DB에만 저장된다.
+개인 사전은 브라우저 DB에만 저장된다. r 호스트 게이트웨이는 웹을 서빙하지 않는다
+(API 전용) — 미리보기는 Vercel 배포에서만 접속한다.
 
 ## 개발
 
