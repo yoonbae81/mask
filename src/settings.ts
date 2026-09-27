@@ -3,13 +3,22 @@ import path from "node:path";
 import { z } from "zod";
 import { ConfigurationError } from "./errors.ts";
 
+const TRUE_STRINGS = new Set(["true", "1", "on", "yes"]);
+const FALSE_STRINGS = new Set(["false", "0", "off", "no"]);
+
 const booleanSchema = (defaultValue: boolean) =>
   z.preprocess((val) => {
     if (val === undefined || val === "") return defaultValue;
+    if (typeof val === "boolean") return val;
     if (typeof val === "string") {
       const lower = val.toLowerCase().trim();
-      if (lower === "true" || lower === "1") return true;
-      if (lower === "false" || lower === "0") return false;
+      // on/off, yes/no 도 인정한다. MASK_TERM_ESCAPE=off 가 true 로 파싱되어
+      // 우회 기능이 반대로 켜지던 실제 사고(2026-09-27)의 재발을 막는다.
+      if (TRUE_STRINGS.has(lower)) return true;
+      if (FALSE_STRINGS.has(lower)) return false;
+      // 인식 불가 문자열은 fallback 변환하지 않고 그대로 둔다 —
+      // z.boolean() 이 기동을 거절한다(오타가 조용히 반대값이 되는 것 방지).
+      return val;
     }
     return Boolean(val);
   }, z.boolean().default(defaultValue));

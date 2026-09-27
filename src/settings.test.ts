@@ -121,3 +121,39 @@ describe("settings", () => {
     assert.strictEqual(d.MASK_ALLOWED_ORIGINS, "");
   });
 });
+describe("settings — boolean string parsing", () => {
+  const base = {
+    MASK_TERMS_FILE: "config/terms.yaml",
+    MASK_PROVIDERS_FILE: "config/providers.yaml",
+  };
+
+  it("recognizes on/off/yes/no (and case-insensitive true/false)", () => {
+    for (const [raw, expected] of [
+      ["on", true],
+      ["yes", true],
+      ["TRUE", true],
+      ["1", true],
+      ["off", false],
+      ["no", false],
+      ["False", false],
+      ["0", false],
+    ] as const) {
+      const s = parseSettings(
+        { ...base, MASK_TERM_ESCAPE: raw },
+        { checkFilesExist: false }
+      );
+      assert.strictEqual(s.MASK_TERM_ESCAPE, expected, `input: ${raw}`);
+    }
+  });
+
+  it("rejects unrecognized boolean strings at startup (fail-closed)", () => {
+    assert.throws(
+      () =>
+        parseSettings(
+          { ...base, MASK_TERM_ESCAPE: "maybe" },
+          { checkFilesExist: false }
+        ),
+      ConfigurationError
+    );
+  });
+});
