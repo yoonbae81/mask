@@ -114,6 +114,18 @@ const DROP_RESPONSE_HEADERS = Object.freeze(
   ])
 );
 
+// Guard 스캔 범위를 마스킹 대상인 대화 본문으로 한정한다 (envelope 제외).
+// tools 스키마, id, metadata 등은 mask 가 재작성하지 않는 구조 정보이므로
+// 스캔에서 제외한다 — 스키마의 숫자(예: maximum: 1000000)·런타임 id 로 인한 오탐 방지.
+function conversationGuardTarget(body: unknown): string {
+  const envelope = (body ?? {}) as Record<string, unknown>;
+  const conversation: Record<string, unknown> = {};
+  for (const key of ["messages", "system", "prompt", "input"]) {
+    if (envelope[key] !== undefined) conversation[key] = envelope[key];
+  }
+  return JSON.stringify(conversation);
+}
+
 export async function handleProxyRequest(
   fastify: FastifyInstance,
   request: FastifyRequest,
@@ -303,7 +315,7 @@ export async function handleProxyRequest(
   const serialized = JSON.stringify(tokenizedBody);
 
   try {
-    session.assertNoLeak(serialized);
+    session.assertNoLeak(conversationGuardTarget(tokenizedBody));
   } catch (err) {
     activityLog.record({
       ts: new Date().toISOString(),
@@ -356,7 +368,7 @@ export async function handleProxyRequest(
       outboundBody = JSON.stringify(translatedBody);
       try {
         // 번역 과정에서 마스킹 토큰이 유실되지 않았는지 재검증한다 (fail-closed)
-        session.assertNoLeak(outboundBody);
+        session.assertNoLeak(conversationGuardTarget(translatedBody));
       } catch (err) {
         activityLog.record({
           ts: new Date().toISOString(),
