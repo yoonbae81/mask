@@ -8,11 +8,26 @@ import { type Settings, parseSettings } from "./settings.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// rewriteUrl 이 provider 프리픽스 대상에서 제외하는 표준 최상위 세그먼트
+const CANONICAL_TOP_SEGMENTS = new Set(["v1", "_mask", "healthz"]);
+
 export async function buildApp(customSettings?: Settings) {
   const settings = customSettings ?? parseSettings(process.env);
   const logger = createLogger(settings);
 
   const app = Fastify({
+    // Provider 경로 프리픽스: /{provider}/v1/... 형태의 요청에서 첫 세그먼트를
+    // 내부 헤더(x-mask-provider)로 옮기고 표준 경로(/v1/...)로 라우팅한다.
+    // 어떤 upstream provider 로 갈지는 proxy-handler 가 헤더를 읽어 결정하며,
+    // 정의되지 않은 provider 는 404 로 끝난다 (fail-closed). 모델명은 치환되지 않는다.
+    // 나머지 경로(v1 외)는 절대 건드리지 않는다.
+    rewriteUrl(req) {
+      const url = req.url ?? "/";
+      const m = /^\/([a-z][a-z0-9_-]*)\/(v1\/.*)$/i.exec(url);
+      if (!m || CANONICAL_TOP_SEGMENTS.has(m[1].toLowerCase())) return url;
+      req.headers["x-mask-provider"] = m[1];
+      return "/" + m[2];
+    },
     bodyLimit: settings.MASK_MAX_BODY_BYTES,
     loggerInstance: logger,
     // SEC-41 & SEC-73: Slowloris mitigation via explicit header/request timeouts.

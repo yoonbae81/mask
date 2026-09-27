@@ -238,6 +238,23 @@ export async function handleProxyRequest(
 
   const rawBody = request.body ?? {};
 
+  // Provider 경로 프리픽스(/:provider/v1/...) — app.rewriteUrl 이 URL 첫 세그먼트를
+  // 내부 헤더로 옮겨 둔다. 정의되지 않은 provider 면 upstream 호출 없이 404 (fail-closed).
+  // 프리픽스가 없으면 기존과 같이 active provider 를 쓴다.
+  const rawProviderOverride = request.headers["x-mask-provider"];
+  let providerOverride: string | null = null;
+  if (typeof rawProviderOverride === "string" && rawProviderOverride.length > 0) {
+    if (!fastify.providers.providers.has(rawProviderOverride)) {
+      return reply.status(404).send({
+        statusCode: 404,
+        error: "NotFound",
+        message: `Unknown provider '${rawProviderOverride}' in route prefix`,
+      });
+    }
+    providerOverride = rawProviderOverride;
+  }
+  const effectiveProvider = providerOverride ?? fastify.providers.active;
+
   // SEC-14: Model parameter validation
   if ((rawBody as any)?.model) {
     const modelVal = (rawBody as any).model;
@@ -291,7 +308,7 @@ export async function handleProxyRequest(
     activityLog.record({
       ts: new Date().toISOString(),
       requestId: String(request.id),
-      provider: fastify.providers.active,
+      provider: effectiveProvider,
       dialect,
       masked: tokenMap.getCategoriesCount(),
       bypassed: session.getBypassedCounts(),
@@ -302,10 +319,10 @@ export async function handleProxyRequest(
   }
 
   // 4. Resolve provider and candidate fallback chain (폴백은 다른 dialect 허용 — 자동 번역)
-  const primary = fastify.providers.resolveCandidate(dialect, fastify.providers.active);
+  const primary = fastify.providers.resolveCandidate(dialect, effectiveProvider);
   if (!primary) {
     throw new UpstreamError(
-      `Provider '${fastify.providers.active}' cannot serve dialect '${dialect}' (no compatible endpoint configured)`
+      `Provider '${effectiveProvider}' cannot serve dialect '${dialect}' (no compatible endpoint configured)`
     );
   }
   const fallbacks = fastify.providers.fallback
