@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import AutoLoad from "@fastify/autoload";
 import Fastify, { type FastifyInstance } from "fastify";
 import { createLogger, scrubServerPaths } from "./logging.ts";
+import { setActivitySink } from "./observability/activity-log.ts";
 import { type Settings, parseSettings } from "./settings.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,6 +37,11 @@ export async function buildApp(customSettings?: Settings) {
     requestTimeout: 30_000,
     keepAliveTimeout: 5_000,
   });
+
+  // 마스킹 활동 이벤트를 구조화 로그로도 방출한다 — journalctl 확인용.
+  // 이벤트에는 민감 원문이 아닌 카테고리별 건수만 담기며, 로그 가드(logMethod)도
+  // 동일하게 적용된다. grep mask_activity 로 조회한다.
+  setActivitySink((event) => logger.info({ ...event }, "mask_activity"));
 
   // Autoload plugins
   await app.register(AutoLoad, {

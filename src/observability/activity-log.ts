@@ -11,6 +11,16 @@ export interface ActivityEvent {
   durationMs?: number;
 }
 
+// 관찰성 싱크: record() 되는 마스킹 이벤트를 구조화 로그로도 내보낸다 (journalctl 대응).
+// 이벤트에는 민감 원문이 아닌 카테고리별 건수만 담긴다.
+export type ActivitySink = (event: ActivityEvent) => void;
+
+let sink: ActivitySink | null = null;
+
+export function setActivitySink(fn: ActivitySink | null): void {
+  sink = fn;
+}
+
 export class ActivityLog {
   private readonly maxSize: number;
   private readonly buffer: (ActivityEvent | null)[];
@@ -34,6 +44,8 @@ export class ActivityLog {
     if (this.count < this.maxSize) {
       this.count++;
     }
+
+    if (sink) sink(sanitizedEvent);
   }
 
   getEvents(limit = 50): (ActivityEvent & { ts: string })[] {
