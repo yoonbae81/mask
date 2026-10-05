@@ -23,5 +23,6 @@ for ((attempt = 1; attempt <= 20; attempt++)); do
 done
 [[ "$healthy" == true ]] || { echo 'Mask health check failed' >&2; exit 1; }
 
+node --env-file="$repo_dir/.env" scripts/smoke-mask-roundtrip.mjs
 npm run smoke:openclaw-glm
 printf 'Deployed mask %s\n' "$(git rev-parse --short HEAD)"
