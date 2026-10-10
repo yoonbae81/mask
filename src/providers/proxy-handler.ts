@@ -525,8 +525,11 @@ export async function handleProxyRequest(
     });
   }
 
-  const upstreamIsSse = String(lastResponse.headers["content-type"]).includes("text/event-stream") || dialect === "responses";
-  const isStream = (rawBody as any)?.stream === true || upstreamIsSse;
+  const wantsStream = (rawBody as any)?.stream === true;
+  // codex backend sends SSE without a content-type header: treat the responses
+  // dialect as SSE only when the client actually asked to stream.
+  const upstreamIsSse = String(lastResponse.headers["content-type"]).includes("text/event-stream") || (dialect === "responses" && wantsStream);
+  const isStream = wantsStream || upstreamIsSse;
   const usedTranslated = usedCandidate.upstreamDialect !== dialect;
   const clientModel =
     typeof (rawBody as any)?.model === "string" ? (rawBody as any).model : undefined;
