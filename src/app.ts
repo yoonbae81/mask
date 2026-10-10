@@ -69,6 +69,7 @@ export async function buildApp(customSettings?: Settings) {
     }
   });
 
+
   // SEC-17, SEC-40, SEC-72 & PERF-48: Pre-frozen standard defense-in-depth security headers
   const STATIC_SECURITY_HEADERS = Object.freeze([
     ["x-content-type-options", "nosniff"],

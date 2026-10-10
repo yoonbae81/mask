@@ -566,3 +566,5 @@ export function translateResponseBody(
   }
   throw new Error(`unsupported translation direction: ${from} -> ${to}`);
 }
+
+// ═════════════════════════════════════════════════════════════════════

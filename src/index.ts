@@ -65,6 +65,24 @@ async function main() {
       port: settings.MASK_PORT,
     });
 
+    // codex의 WebSocket 업그레이드 시도(responses_websockets 폴백)는 프록시 불가 —
+    // node http 서버의 'upgrade' 이벤트에서 즉시 끊는다. 이 레벨에서 처리하면
+    // fastify 본문 파서가 upgrade 요청을 오염시키는 일(FST_ERR_CTP_INVALID_CONTENT_LENGTH)이
+    // 원천 차단되고, 같은 keep-alive 커넥션의 후속 요청도 깨끗하게 유지된다.
+    const server = app.server as import("node:http").Server;
+    server.on("upgrade", (_req, socket) => {
+      // 정상 501 응답 후 grace close — destroy()는 RST를 날려 클라이언트가 같은
+      // 커넥션 풀의 커넥션으로 보내는 후속 요청 본문을 유실시킨다.
+      socket.end(
+        "HTTP/1.1 501 Not Implemented\r\n" +
+          "Connection: close\r\n" +
+          "Content-Type: text/plain\r\n" +
+          "Content-Length: 52\r\n" +
+          "\r\n" +
+          "websocket not supported by mask; use https fallback\n"
+      );
+    });
+
     printBanner(app);
   } catch (err: any) {
     console.error("\nFailed to start Mask:", err.message || err);

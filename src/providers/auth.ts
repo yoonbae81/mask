@@ -1,7 +1,7 @@
 import { UpstreamError } from "../errors.ts";
 import type { ProviderConfig } from "./schema.ts";
 
-export type Dialect = "anthropic" | "openai";
+export type Dialect = "anthropic" | "openai" | "responses";
 
 function sanitizeHeader(val: string): string {
   return val

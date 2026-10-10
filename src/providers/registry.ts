@@ -59,7 +59,12 @@ export function validateEndpointUrl(endpoint: string, providerName: string, dial
   const FORBIDDEN_PORTS = new Set([
     "22", "23", "25", "2375", "2376", "3306", "5432", "6379", "9000", "10250", "10255", "11211", "27017"
   ]);
-  if (parsed.port && FORBIDDEN_PORTS.has(parsed.port)) {
+  // Operator escape hatch: MASK_ALLOWED_ENDPOINT_PORTS (comma-separated) re-allows
+  // specific blocked ports for trusted LAN upstreams (e.g. omlx inference on :9000).
+  const ALLOWED_PORTS = new Set(
+    (process.env.MASK_ALLOWED_ENDPOINT_PORTS ?? "").split(",").map((s) => s.trim()).filter(Boolean)
+  );
+  if (parsed.port && FORBIDDEN_PORTS.has(parsed.port) && !ALLOWED_PORTS.has(parsed.port)) {
     throw new ConfigurationError(
       `Forbidden port '${parsed.port}' in endpoint for provider '${providerName}'`
     );

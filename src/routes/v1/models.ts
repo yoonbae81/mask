@@ -16,33 +16,77 @@ const DROP_HEADERS = new Set([
   "x-request-id",
 ]);
 
+// Preferred catalog dialect per provider config (first configured endpoint wins)
+function pickDialect(config: {
+  endpoints: Record<string, string>;
+}): "responses" | "openai" | "anthropic" | null {
+  if (config.endpoints["responses"]) return "responses";
+  if (config.endpoints["openai"]) return "openai";
+  if (config.endpoints["anthropic"]) return "anthropic";
+  return null;
+}
+
+const DEFAULT_MODELS_PATH: Record<string, string> = {
+  responses: "/models",
+  openai: "/v1/models",
+  anthropic: "/v1/models",
+};
+
 const modelsRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get("/models", async (request, reply) => {
     // SEC-79: Sliding-window rate limiting applies to /v1/models
     if (!enforceRateLimit(fastify, request, reply)) return reply;
 
-    // Try openai dialect endpoint first, then anthropic
-    let target;
-    try {
-      target = fastify.providers.resolveProvider("openai");
-    } catch {
-      target = fastify.providers.resolveProvider("anthropic");
+    // Provider selection mirrors the proxy routes: x-mask-provider prefix
+    // (set by app.rewriteUrl from /:provider/v1/...), else the active provider.
+    const raw = request.headers["x-mask-provider"];
+    let providerName: string | null = null;
+    if (typeof raw === "string" && raw.length > 0) {
+      if (!fastify.providers.providers.has(raw)) {
+        return reply.status(404).send({
+          statusCode: 404,
+          error: "NotFound",
+          message: `Unknown provider '${raw}' in route prefix`,
+        });
+      }
+      providerName = raw;
+    } else {
+      providerName = fastify.providers.active;
+    }
+    const config = fastify.providers.getProvider(providerName);
+    if (!config) {
+      return reply.status(404).send({
+        statusCode: 404,
+        error: "NotFound",
+        message: `Provider '${providerName}' is not configured`,
+      });
     }
 
-    // SEC-26: Isolate environment variable access
+    const dialect = pickDialect(config);
+    if (!dialect) {
+      return reply.status(404).send({
+        statusCode: 404,
+        error: "NotFound",
+        message: `Provider '${providerName}' has no configured endpoint`,
+      });
+    }
+
     const envSubset: Record<string, string | undefined> = {};
-    if (target.config.auth === "api_key" && target.config.api_key_env) {
-      envSubset[target.config.api_key_env] = process.env[target.config.api_key_env];
+    if (config.auth === "api_key" && config.api_key_env) {
+      envSubset[config.api_key_env] = process.env[config.api_key_env];
     }
 
-    const headers = prepareOutboundHeaders(
-      request.headers,
-      target.config,
-      target.config.endpoints["openai"] ? "openai" : "anthropic",
-      envSubset
-    );
+    const headers = prepareOutboundHeaders(request.headers, config, dialect, envSubset);
 
-    const upstreamUrl = `${target.endpoint}/v1/models`;
+    // Preserve the query string (e.g. codex client_version) and apply dialect path overrides
+    const rawUrl = request.raw.url || request.url || "";
+    const qIdx = rawUrl.indexOf("?");
+    const qs = qIdx >= 0 ? rawUrl.slice(qIdx) : "";
+    // models path: only an explicit paths["models"] override applies - the inference
+    // paths override (e.g. responses -> /responses) must not leak into the catalog route
+    const upstreamPath = config.paths?.["models"] ?? DEFAULT_MODELS_PATH[dialect];
+    const upstreamUrl = `${config.endpoints[dialect]}${upstreamPath}${qs}`;
+
     const res = await sendUpstream(upstreamUrl, {
       method: "GET",
       headers,

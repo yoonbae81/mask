@@ -18,6 +18,7 @@ import type { DialectRules } from "../privacy/rules/anthropic.ts";
 const DEFAULT_UPSTREAM_PATH: Record<Dialect, string> = {
   anthropic: "/v1/messages",
   openai: "/v1/chat/completions",
+  responses: "/responses",
 };
 
 // SEC-79: Sliding-window rate limiter — per-IP timestamps of admitted requests
@@ -28,6 +29,19 @@ export function resetRateLimit(): void {
 }
 
 const RATE_WINDOW_MS = 1000;
+
+// COMPAT: messages 배열의 role:"developer"를 "system"으로 바꾼다.
+// Responses API 프리샘(hef) 호환성 — 원본 body는 변경하지 않고 복사본만 수정한다.
+function normalizeDeveloperRoles(body: unknown): void {
+  if (!body || typeof body !== "object") return;
+  const messages = (body as Record<string, unknown>).messages;
+  if (!Array.isArray(messages)) return;
+  for (const msg of messages) {
+    if (msg && typeof msg === "object" && (msg as Record<string, unknown>).role === "developer") {
+      (msg as Record<string, unknown>).role = "system";
+    }
+  }
+}
 
 export function checkRateLimit(ip: string, maxRps: number): boolean {
   const now = Date.now();
@@ -134,10 +148,12 @@ export async function handleProxyRequest(
     dialect: Dialect;
     path: string;
     rules: DialectRules;
+    rawSse?: boolean;
+    providerOverride?: string;
   }
 ) {
   const startTime = performance.now();
-  const { dialect, path, rules } = options;
+  const { dialect, path, rules, rawSse = false } = options;
 
   // SEC-46: Request URI length limit (<= 2048) and query param count limit (<= 50) against URI flood DoS
   const rawUrl = request.raw.url || request.url;
@@ -248,7 +264,9 @@ export async function handleProxyRequest(
     }
   }
 
-  const rawBody = request.body ?? {};
+  const rawBodyOriginal = request.body ?? {};
+
+  const rawBody = rawBodyOriginal;
 
   // Provider 경로 프리픽스(/:provider/v1/...) — app.rewriteUrl 이 URL 첫 세그먼트를
   // 내부 헤더로 옮겨 둔다. 정의되지 않은 provider 면 upstream 호출 없이 404 (fail-closed).
@@ -264,6 +282,9 @@ export async function handleProxyRequest(
       });
     }
     providerOverride = rawProviderOverride;
+  }
+  if (!providerOverride && options.providerOverride) {
+    providerOverride = options.providerOverride;
   }
   const effectiveProvider = providerOverride ?? fastify.providers.active;
 
@@ -310,6 +331,10 @@ export async function handleProxyRequest(
   });
   const tokenMap = session.tokenMap;
   const tokenizedBody = walkJson(rawBody, rules, (text) => session.mask(text));
+
+  // COMPAT: OpenAI dialect의 `developer` role은 일부 업스트림(z.ai GLM 등)에서 1214로 거부된다.
+  // same-dialect 전송 시에도 system으로 정규화한다 (cross-dialect 번역기는 이미 처리).
+  normalizeDeveloperRoles(tokenizedBody);
 
   // 3. Serialize and Guard check
   const serialized = JSON.stringify(tokenizedBody);
@@ -500,7 +525,7 @@ export async function handleProxyRequest(
     });
   }
 
-  const upstreamIsSse = String(lastResponse.headers["content-type"]).includes("text/event-stream");
+  const upstreamIsSse = String(lastResponse.headers["content-type"]).includes("text/event-stream") || dialect === "responses";
   const isStream = (rawBody as any)?.stream === true || upstreamIsSse;
   const usedTranslated = usedCandidate.upstreamDialect !== dialect;
   const clientModel =
@@ -526,12 +551,30 @@ export async function handleProxyRequest(
     } else {
       // SSE 업스트림은 JSON 프레이밍 때문에 토큰이 delta 경계로 갈라지므로
       // 이벤트 단위 재조립이 필요하다. 비SSE 스트림은 기존 변환기를 유지한다.
-      const transform = upstreamIsSse
-        ? new SseDetokenizer(tokenMap)
-        : fastify.settings.MASK_STREAMING_MODE === "buffer"
-          ? new BufferedDetokenizer(tokenMap)
-          : new RollingDetokenizer(tokenMap);
-      webStream = Readable.toWeb(lastResponse.body as any).pipeThrough(transform as any);
+      if (rawSse && upstreamIsSse) {
+        // Responses SSE ????? ?? ??? ?? ?? ??? ????
+        webStream = Readable.toWeb(lastResponse.body as any)
+          .pipeThrough(new SseDetokenizer(tokenMap) as any);
+        if (process.env.MASK_DEBUG_DUMP_SSE) {
+          const dumpPath = process.env.MASK_DEBUG_DUMP_SSE;
+          const fs = await import("node:fs");
+          const web = await import("node:stream/web");
+          const tap = new web.TransformStream({
+            transform(chunk, controller) {
+              try { fs.appendFileSync(dumpPath, chunk); } catch {}
+              controller.enqueue(chunk);
+            },
+          });
+          webStream = (webStream as any).pipeThrough(tap);
+        }
+      } else {
+        const transform = upstreamIsSse
+          ? new SseDetokenizer(tokenMap)
+          : fastify.settings.MASK_STREAMING_MODE === "buffer"
+            ? new BufferedDetokenizer(tokenMap)
+            : new RollingDetokenizer(tokenMap);
+        webStream = Readable.toWeb(lastResponse.body as any).pipeThrough(transform as any);
+      }
     }
 
     activityLog.record({

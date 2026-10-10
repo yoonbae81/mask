@@ -485,3 +485,8 @@ export class AnthropicToOpenAISseTranslator extends TransformStream<Uint8Array, 
     });
   }
 }
+
+// ── openai chat chunks → Responses API events ────────────────────────────────
+// chat/completions SSE를 Codex CLI(OAuth)가 기대하는 Responses API 스트림 이벤트로
+// 번역한다. 텍스트 delta와 function_call delta를 모두 처리한다.
+

@@ -11,3 +11,7 @@ __pycache__/
 .iteration_state.json
 
 .serena/
+
+# local operation backups
+*.bak*
+.env.bak*
