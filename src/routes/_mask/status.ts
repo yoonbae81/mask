@@ -2,6 +2,7 @@ import path from "node:path";
 import type { FastifyPluginAsync } from "fastify";
 import { getUpstreamAgentStats } from "../../providers/http.ts";
 import { enforceRateLimit } from "../../providers/proxy-handler.ts";
+import { getBypassUntil, isBypassActive } from "../../observability/bypass.ts";
 import { safeCompareToken } from "./activity.ts";
 
 const statusRoute: FastifyPluginAsync = async (fastify) => {
@@ -23,11 +24,15 @@ const statusRoute: FastifyPluginAsync = async (fastify) => {
     const termSet = fastify.termSet;
     const providers = fastify.providers;
     const settings = fastify.settings;
+    const bypassUntilMs = getBypassUntil();
+    const bypassActive = isBypassActive();
 
     return {
       status: "ok",
       version: "0.1.0",
       guard: settings.MASK_GUARD,
+      maskingBypassed: bypassActive,
+      bypassUntil: bypassActive ? new Date(bypassUntilMs).toISOString() : null,
       // SEC-53: Hide absolute internal host paths from status endpoint
       termsFile: path.basename(settings.resolvedTermsFile),
       providersFile: path.basename(settings.resolvedProvidersFile),

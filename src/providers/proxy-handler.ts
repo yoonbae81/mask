@@ -7,6 +7,7 @@ import { type Dialect, prepareOutboundHeaders } from "./auth.ts";
 import { sendUpstream } from "./http.ts";
 import { UpstreamError } from "../errors.ts";
 import { activityLog } from "../observability/activity-log.ts";
+import { isBypassActive } from "../observability/bypass.ts";
 import { RollingDetokenizer } from "../streaming/rolling.ts";
 import { BufferedDetokenizer } from "../streaming/buffered.ts";
 import { SseDetokenizer } from "../streaming/sse-detokenizer.ts";
@@ -324,13 +325,19 @@ export async function handleProxyRequest(
   }
 
   // 1-2. Per-request mask session (matchers cached in TermSet, TokenMap per request)
+  // 치환 일시정지(/_mask/bypass) 유효 중에는 치환과 가드를 모두 건너뛴다. 가드만 남겨두면
+  // fail-closed 정책상 평문 요청이 전부 502로 막히므로 둘은 함께 우회된다. 사실은
+  // 활동 로그의 maskingBypassed 로 반드시 남긴다. 만료는 요청 시점 lazy 체크.
+  const maskingBypassed = isBypassActive();
   const session = new MaskSession(fastify.termSet, {
     tokenFormat: fastify.settings.MASK_TOKEN_FORMAT,
     guard: fastify.settings.MASK_GUARD,
     termEscape: fastify.settings.MASK_TERM_ESCAPE,
   });
   const tokenMap = session.tokenMap;
-  const tokenizedBody = walkJson(rawBody, rules, (text) => session.mask(text));
+  const tokenizedBody = maskingBypassed
+    ? rawBody
+    : walkJson(rawBody, rules, (text) => session.mask(text));
 
   // COMPAT: OpenAI dialect의 `developer` role은 일부 업스트림(z.ai GLM 등)에서 1214로 거부된다.
   // same-dialect 전송 시에도 system으로 정규화한다 (cross-dialect 번역기는 이미 처리).
@@ -340,7 +347,7 @@ export async function handleProxyRequest(
   const serialized = JSON.stringify(tokenizedBody);
 
   try {
-    session.assertNoLeak(conversationGuardTarget(tokenizedBody));
+    if (!maskingBypassed) session.assertNoLeak(conversationGuardTarget(tokenizedBody));
   } catch (err) {
     activityLog.record({
       ts: new Date().toISOString(),
@@ -349,6 +356,7 @@ export async function handleProxyRequest(
       dialect,
       masked: tokenMap.getCategoriesCount(),
       bypassed: session.getBypassedCounts(),
+      maskingBypassed,
       guardTripped: true,
       durationMs: Math.round(performance.now() - startTime),
     });
@@ -393,7 +401,7 @@ export async function handleProxyRequest(
       outboundBody = JSON.stringify(translatedBody);
       try {
         // 번역 과정에서 마스킹 토큰이 유실되지 않았는지 재검증한다 (fail-closed)
-        session.assertNoLeak(conversationGuardTarget(translatedBody));
+        if (!maskingBypassed) session.assertNoLeak(conversationGuardTarget(translatedBody));
       } catch (err) {
         activityLog.record({
           ts: new Date().toISOString(),
@@ -402,6 +410,7 @@ export async function handleProxyRequest(
           dialect,
           masked: tokenMap.getCategoriesCount(),
       bypassed: session.getBypassedCounts(),
+      maskingBypassed,
           guardTripped: true,
           translated: true,
           durationMs: Math.round(performance.now() - startTime),
@@ -587,6 +596,7 @@ export async function handleProxyRequest(
       dialect,
       masked: tokenMap.getCategoriesCount(),
       bypassed: session.getBypassedCounts(),
+      maskingBypassed,
       guardTripped: false,
       translated: usedTranslated,
       upstreamStatus: lastResponse.statusCode,
@@ -625,6 +635,7 @@ export async function handleProxyRequest(
     dialect,
     masked: tokenMap.getCategoriesCount(),
       bypassed: session.getBypassedCounts(),
+      maskingBypassed,
     guardTripped: false,
     translated: usedTranslated,
     upstreamStatus: lastResponse.statusCode,

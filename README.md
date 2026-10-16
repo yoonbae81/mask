@@ -381,6 +381,39 @@ Presidio 자체의 구조도 이 프로젝트와 맞지 않는다. Presidio는 c
 홀딩했다가 완성되는 대로 복원하므로, 델타 경계와 무관하게 복원된다. 번역이 필요한
 크로스 다이얼렉트 폴백에서는 형식 번역 후 같은 방식으로 복원한다.
 
+## 치환 일시정지 — `/_mask/bypass`
+
+`terms.yaml`이나 환경변수를 건드리지 않은 채 일정 시간만 치환(그리고 송신 직전 가드)을
+끄고 싶을 때 쓴다. 우회 중인 요청은 민감어가 토큰으로 바뀌지 않은 **평문 그대로**
+업스트림으로 전송되므로, 의도적 유출 통로다 — 필요한 최소 시간만 켜라.
+
+```bash
+# 1시간 동안 치환 정지 (서버에서, 또는 ssh로)
+curl -s -XPOST http://127.0.0.1:8787/_mask/bypass \
+  -H "Authorization: Bearer $MASK_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" -d '{"minutes":60}'
+
+# 현재 상태
+curl -s http://127.0.0.1:8787/_mask/bypass -H "Authorization: Bearer $MASK_ADMIN_TOKEN"
+
+# 조기 재개 (만료를 기다리지 않음)
+curl -s -XDELETE http://127.0.0.1:8787/_mask/bypass -H "Authorization: Bearer $MASK_ADMIN_TOKEN"
+```
+
+동작 규칙:
+
+- **자동 원복**: 만료는 타이머가 아니라 요청 시점 판정 — `minutes`가 지난 뒤 들어온
+  요청부터 다시 치환된다. 서버가 재시작되면 무조건 치환 on으로 원복된다(안전 기본값).
+- **상한 캡**: `minutes`는 1 이상 `MAX_BYPASS_MINUTES`(기본 1440 = 24시간) 이하 정수.
+- **가드도 함께 꺼진다**: fail-closed 정책상 가드(`assertNoLeak`)만 남겨두면 우회 중인
+  평문 요청이 전부 502로 막히므로, 치환과 가드는 한 윈도우로 함께 우회된다.
+- **감사 흔적**: 우회 활성/해제는 구조화 로그(`masking_bypass_enabled`·
+  `masking_bypass_cleared`)로 남고, 우회 중 통과한 요청의 `mask_activity` 레코드에는
+  `maskingBypassed: true`가 찍힌다. `/_mask/status`에도 `maskingBypassed`·`bypassUntil`이
+  노출된다.
+- **인증**: `MASK_ADMIN_TOKEN`이 설정돼 있거나 `MASK_ALLOW_REMOTE=true`면 bearer 토큰이
+  필수다(다른 `/_mask/*` 경로와 동일).
+
 ## 관측 도구
 
 "실제로 뭐가 걸리는지" 확인하려면 로그에 원문을 남기는 대신 다음 두 가지를 쓴다. 둘 다
@@ -398,6 +431,7 @@ npm run inspect -- --payload test/fixtures/anthropic-messages.json
 **실시간 활동 집계** — `GET /_mask/activity`. 로그와 같은 정보(provider, 분류별 치환
 건수, 폴백 사용 여부, `\용어` 우회 건수, 타임스탬프)를 메모리 원형 버퍼(최근 200건,
 재시작 시 소실)로 조회한다. 용어 원문은 구조적으로 담을 수 없다 — 건수만 기록한다.
+치환 일시정지(`/_mask/bypass`) 유효 중 통과한 요청은 `maskingBypassed: true`로 표시된다.
 
 **마스킹 감사 로그(journalctl)** — 프록시 요청마다 `mask_activity` 구조화 로그 한 줄이
 기록된다(requestId, provider, dialect, 분류별 치환 건수, `\용어` 우회 건수, 가드 작동
@@ -445,7 +479,7 @@ mask/
 │   ├── index.ts, app.ts, settings.ts, logging.ts, errors.ts
 │   ├── plugins/            # 설정·용어·provider 를 앱에 주입 (Fastify autoload)
 │   ├── routes/              # 디렉터리 구조가 곧 URL 구조 (Fastify autoload)
-│   │   ├── healthz.ts, _mask/{status,activity}.ts
+│   │   ├── healthz.ts, _mask/{status,activity,bypass}.ts
 │   │   └── v1/{messages,models,responses}.ts, v1/chat/completions.ts
 │   ├── privacy/              # 핵심 파이프라인 — 순수 함수, 소스 옆에 테스트
 │   │   ├── terms.ts, matcher.ts, patterns.ts, mapping.ts

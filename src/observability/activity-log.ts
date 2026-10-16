@@ -5,6 +5,7 @@ export interface ActivityEvent {
   dialect: string;
   masked: Record<string, number>;
   bypassed?: Record<string, number>;
+  maskingBypassed?: boolean;
   guardTripped: boolean;
   translated?: boolean;
   upstreamStatus?: number;
