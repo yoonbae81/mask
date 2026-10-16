@@ -471,6 +471,16 @@ cd web && npm run build   # Vite 빌드 → npm run scan 으로 산출물 문자
 `node src/index.ts`가 곧 실행 명령이다. 타입 검사는 실행을 막지 않으므로 `npm run check`가
 유일한 검증 게이트다. 빌드가 있는 유일한 곳은 `web/`(Vite 정적 빌드)뿐이다.
 
+### 배포 — 서버에서 `scripts/deploy.sh`
+
+main 브랜치·clean 트리를 확인하고 `git pull --ff-only` → `npm ci` → `npm run check` →
+`mask.service` 재시작 → `/healthz` 폴링 → `smoke-mask-roundtrip`(업스트림을 목업해
+치환·복원 의미론만 검증, 외부 호출 없음)까지 수행한다.
+
+`smoke:openclaw-glm`은 배포 게이트에 **포함하지 않는다** — 이 스모크는 OpenClaw의 실제
+z.ai 키(`~/.openclaw/.env`)로 실호환을 검증하는 도구라, 키 상태가 mask 배포 성패를
+좌우하는 결합이 생기기 때문이다. 실제 연결이 의심될 때 별도 실행한다.
+
 ## 프로젝트 구조
 
 ```text

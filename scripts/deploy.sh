@@ -24,5 +24,7 @@ done
 [[ "$healthy" == true ]] || { echo 'Mask health check failed' >&2; exit 1; }
 
 node --env-file="$repo_dir/.env" scripts/smoke-mask-roundtrip.mjs
-npm run smoke:openclaw-glm
+# 참고: smoke:openclaw-glm 은 배포 게이트에 넣지 않는다 — OpenClaw 의 z.ai 키
+# (~/.openclaw/.env) 상태가 mask 배포 성패를 좌우하는 결합이 생기기 때문.
+# 실제 연결 검증이 필요할 때 별도 실행: npm run smoke:openclaw-glm
 printf 'Deployed mask %s\n' "$(git rev-parse --short HEAD)"
