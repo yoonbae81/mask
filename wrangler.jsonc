@@ -8,6 +8,9 @@
   "name": "mask",
   "compatibility_date": "2026-10-18",
   "workers_dev": true,
+  "routes": [
+    { "pattern": "xcv.kr/mask*", "zone_name": "xcv.kr" }
+  ],
   "assets": {
     "directory": "./web/dist",
     "html_handling": "none",
