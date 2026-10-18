@@ -537,6 +537,21 @@ mask/
 - 불특정 외부 인명·지명(임직원이 아닌) 탐지는 지원하지 않는다 — 확률적 NER은 재현율이
   곧 유출률이 되므로 채택하지 않았다.
 
+## 웹 UI — Cloudflare Static Assets 배포
+
+`web/`은 Cloudflare Worker `mask`(xcv.kr/mask, workers.dev 파일럿 https://mask.y-e2f.workers.dev)로
+서빙한다. md2hwpx와 동일한 assets-only 구성:
+
+- `wrangler.jsonc` — assets 디렉터리 `./web/dist`. main 스크립트 없음.
+- `scripts/prepare-cloudflare.mjs` — `vercel.json`을 단일 출처로 삼아 `_redirects`(SPA 라우트
+  200 rewrite, `/`·`/mask` 302)와 `_headers`(보안 헤더 + assets immutable 캐시)를 생성해
+  dist에 쓴다. 헤더·리다이렉트를 바꿀 때는 vercel.json을 고른다.
+- 빌드·배포:
+  - `npm run cf:build` — web 의존성 설치 + vite build + redirects/headers 생성 (CI·Workers Builds용, 자가완결)
+  - `npm run cf:dry-run` / `npm run cf:deploy` — wrangler 배포 (로컬 OAuth 또는 `CLOUDFLARE_API_TOKEN`)
+- 서버 프록시(`src/`, mask.service)와는 무관하다. gateway worker(quota 레포)의 upstream 교체로
+  xcv.kr/mask 트래픽이 넘어가며, 롤백은 upstream host 한 줄 revert.
+
 ## 주의사항
 
 - Mask은 보안 정책을 대체하지 않는다. 사용 전 소속 조직의 보안 정책을 확인하고, 반드시 이를 준수해야 한다.

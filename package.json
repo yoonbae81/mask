@@ -14,6 +14,7 @@
     "inspect": "node src/tools/inspect.ts",
     "smoke:openclaw-glm": "node scripts/smoke-openclaw-glm.mjs",
     "build:cloudflare": "npm --prefix web run build && node scripts/prepare-cloudflare.mjs",
+    "cf:build": "npm --prefix web ci && npm --prefix web run build && node scripts/prepare-cloudflare.mjs",
     "cf:dry-run": "wrangler deploy --dry-run",
     "cf:deploy": "wrangler deploy"
   },
